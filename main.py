@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 import sqlite3
 import os
+import datetime
 import uvicorn
 
 app = FastAPI(title="Campus Assistant API")
@@ -29,11 +30,22 @@ def init_db():
             email TEXT NOT NULL,
             location TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS timetable (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section TEXT NOT NULL,
+            day TEXT NOT NULL,
+            start_min INTEGER NOT NULL,
+            end_min INTEGER NOT NULL,
+            time_label TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            faculty TEXT NOT NULL,
+            room TEXT NOT NULL
+        );
     """)
     
-    cursor.executescript("DELETE FROM rooms; DELETE FROM proctors;")
+    cursor.executescript("DELETE FROM rooms; DELETE FROM proctors; DELETE FROM timetable;")
     
-    # ECE Department Data
+    # --- 1. DIRECTORY DATA ---
     rooms = [
         ('rm_ece_hod', 'ECE HOD (Dr. Sobha Rani)', 'Offices', '1st Floor', 'Right Wing'),
         ('rm_ladies_lounge', 'Ladies Lounge', 'Amenities', '1st Floor', '107'),
@@ -57,7 +69,7 @@ def init_db():
     ]
     cursor.executemany("INSERT INTO rooms (id, name, category, floor, room_number) VALUES (?, ?, ?, ?, ?)", rooms)
 
-    # Proctor Metadata
+    # --- 2. PROCTOR DATA ---
     proctor_metadata = {
         "Dr. Thejaswini S": ("Associate Professor", "9008637144", "thejaswini.s@bmsit.in", "3rd Floor"),
         "Dr. Mamatha K R": ("Assistant Professor", "9972042574", "mamathakr@bmsit.in", "1st Floor"),
@@ -70,7 +82,6 @@ def init_db():
         "Dr. Thyagaraj Tanjavur": ("Assistant Professor", "9845133392", "thyagaraj_tanjavur@bmsit.in", "Location not available")
     }
 
-    # Clean Dictionary mapping for USNs
     raw_usn_mappings = {
         "Dr. Thejaswini S": ["1BY24EC003", "1BY24EC005", "1BY24EC006", "1BY24EC008", "1BY24EC011", "1BY24EC013", "1BY24EC014", "1BY24EC015", "1BY24EC016", "1BY24EC029", "1BY24EC030", "1BY24EC038", "1BY24EC039", "1BY24EC045", "1BY24EC046", "1BY24EC052", "1BY24EC053", "1BY24EC062", "1BY24EC073", "1BY24EC074", "1BY25EC400", "1BY25EC401", "1BY24EC193", "1BY24EC194"],
         "Dr. Mamatha K R": ["1BY24EC076", "1BY24EC081", "1BY24EC084", "1BY24EC087", "1BY24EC093", "1BY24EC095", "1BY24EC096", "1BY24EC098", "1BY24EC105", "1BY24EC109", "1BY24EC110", "1BY24EC113", "1BY24EC116", "1BY24EC117", "1BY24EC119", "1BY24EC120", "1BY24EC121", "1BY24EC124", "1BY24EC131", "1BY24EC132", "1BY24EC133", "1BY24EC134", "1BY25EC402", "1BY25EC403"],
@@ -83,14 +94,42 @@ def init_db():
         "Dr. Thyagaraj Tanjavur": ["1BY24EC138", "1BY24EC140", "1BY24EC144", "1BY24EC146", "1BY24EC147", "1BY24EC149", "1BY24EC152", "1BY24EC153", "1BY24EC163", "1BY24EC171", "1BY24EC172", "1BY24EC173", "1BY24EC176", "1BY24EC178", "1BY24EC185", "1BY24EC188", "1BY24EC191", "1BY24EC192", "1BY22EC027", "1BY23EC011", "1BY25EC416", "1BY25EC417"]
     }
 
-    # Combine mapping with metadata dynamically
     proctor_db_data = []
     for p_name, usns in raw_usn_mappings.items():
         meta = proctor_metadata[p_name]
         for usn in usns:
             proctor_db_data.append((usn, p_name, meta[0], meta[1], meta[2], meta[3]))
-        
+            
     cursor.executemany("INSERT INTO proctors (usn, proctor_name, title, phone, email, location) VALUES (?, ?, ?, ?, ?, ?)", proctor_db_data)
+
+    # --- 3. TIMETABLE DATA ---
+    schedule = [
+        # SECTION A (Room A424)
+        ('A', 'Monday', 510, 565, '08:30-09:25', 'ARM', 'Dr. Shivarudraiah B', 'A424'),
+        ('A', 'Monday', 565, 620, '09:25-10:20', 'DSP', 'Dr. Mamatha K R', 'A424'),
+        ('A', 'Monday', 640, 750, '10:40-12:30', 'DSP LAB / ARM LAB', 'Dr. Mamatha / Dr. Shivarudraiah', 'A1 / A2 Labs'),
+        ('A', 'Tuesday', 510, 565, '08:30-09:25', 'ME', 'Dr. Asha K', 'A424'),
+        ('A', 'Tuesday', 565, 620, '09:25-10:20', 'ARM', 'Dr. Shivarudraiah B', 'A424'),
+        ('A', 'Tuesday', 640, 695, '10:40-11:35', 'DSP', 'Dr. Mamatha K R', 'A424'),
+        ('A', 'Wednesday', 510, 565, '08:30-09:25', 'ARM', 'Dr. Shivarudraiah B', 'A424'),
+        ('A', 'Thursday', 510, 565, '08:30-09:25', 'DSP', 'Dr. Mamatha K R', 'A424'),
+        ('A', 'Thursday', 565, 620, '09:25-10:20', 'RMIPR', 'Dr. Rashmi N', 'A424'),
+        ('A', 'Friday', 565, 620, '09:25-10:20', 'ME', 'Dr. Asha K', 'A424'),
+        
+        # SECTION B (Room A320)
+        ('B', 'Monday', 510, 565, '08:30-09:25', 'ME', 'Dr. Deepa N Reddy', 'A320'),
+        ('B', 'Monday', 565, 620, '09:25-10:20', 'DSP', 'Dr. Thejaswini S', 'A320'),
+        ('B', 'Monday', 640, 695, '10:40-11:35', 'ARM', 'Dr. Suryakanth B', 'A320'),
+        ('B', 'Tuesday', 510, 565, '08:30-09:25', 'DSP', 'Dr. Thejaswini S', 'A320'),
+        ('B', 'Tuesday', 565, 620, '09:25-10:20', 'RMIPR', 'Dr. Soumya Vastrad', 'A320'),
+        
+        # SECTION C (Room A321)
+        ('C', 'Monday', 510, 565, '08:30-09:25', 'DSP', 'Dr. Vijayalakshmi G V', 'A321'),
+        ('C', 'Monday', 565, 620, '09:25-10:20', 'ARM', 'Dr. Anil Kumar D', 'A321'),
+        ('C', 'Tuesday', 510, 565, '08:30-09:25', 'RMIPR', 'Dr. Asha G H', 'A321'),
+        ('C', 'Tuesday', 565, 620, '09:25-10:20', 'ARM', 'Dr. Anil Kumar D', 'A321')
+    ]
+    cursor.executemany("INSERT INTO timetable (section, day, start_min, end_min, time_label, subject, faculty, room) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", schedule)
     
     conn.commit()
     conn.close()
@@ -106,44 +145,46 @@ HTML_CONTENT = """
     <title>Sir M. Visvesvaraya Block - Kiosk Wayfinding</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 30px; }
-        .top-banner { text-align: center; margin-bottom: 30px; }
-        .top-banner h1 { margin: 0; color: #3498db; font-size: 28px; font-weight: 700; }
-        .top-banner p { margin: 8px 0 0; color: #999; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 25px; }
+        .top-banner { text-align: center; margin-bottom: 25px; }
+        .top-banner h1 { margin: 0; color: #3498db; font-size: 26px; font-weight: 700; }
+        .top-banner p { margin: 6px 0 0; color: #999; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
 
         .kiosk-container { display: flex; gap: 30px; max-width: 1200px; margin: 0 auto; }
         
-        .sidebar { width: 450px; display: flex; flex-direction: column; gap: 18px; }
-        
+        .sidebar { width: 450px; display: flex; flex-direction: column; gap: 15px; }
         .panel { background: #151515; border: 1px solid #333; padding: 20px; border-radius: 12px; }
-        .panel label { font-size: 12px; color: #bbb; font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 8px; }
-        select, input { width: 100%; padding: 12px; background: #0a0a0a; color: #fff; border: 1px solid #444; border-radius: 8px; font-size: 15px; outline: none; }
+        
+        .main-tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+        .tab-btn { flex: 1; padding: 12px 6px; background: #222; color: #aaa; border: 1px solid #333; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; transition: 0.2s; text-align: center;}
+        .tab-btn.active { background: #3498db; color: #fff; border-color: #3498db; }
+        
+        .view { display: none; }
+        .view.active { display: block; }
+        
+        label { font-size: 12px; color: #bbb; font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 8px; }
+        select, input { width: 100%; padding: 12px; background: #0a0a0a; color: #fff; border: 1px solid #444; border-radius: 8px; font-size: 14px; outline: none; margin-bottom: 15px; }
         select:focus, input:focus { border-color: #3498db; }
         
-        .main-tabs { display: flex; gap: 10px; margin-bottom: 10px; }
-        .tab-btn { flex: 1; padding: 12px; background: #222; color: #aaa; border: 1px solid #333; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .tab-btn.active { background: #3498db; color: #fff; border-color: #3498db; }
-
-        #directoryView, #studentServicesView { display: none; }
-        #directoryView.active, #studentServicesView.active { display: block; }
-        
+        /* Directory Specifics */
         .category-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
-        .cat-btn { background: #222; color: #ddd; border: 1px solid #444; padding: 12px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+        .cat-btn { background: #222; color: #ddd; border: 1px solid #444; padding: 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
         .cat-btn.active, .cat-btn:hover { background: #444; border-color: #3498db; color: #fff; }
-        
-        .facility-list { height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px; }
-        .facility-card { background: #1a1a1a; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; cursor: pointer; transition: 0.2s; }
+        .facility-list { height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px; }
+        .facility-card { background: #1a1a1a; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; cursor: pointer; }
         .facility-card:hover { border-color: #3498db; background: #222; }
-        
-        .search-btn { width: 100%; padding: 14px; background: #3498db; color: #fff; font-weight: bold; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
-        .proctor-result { margin-top: 15px; padding: 15px; background: #111; border: 1px solid #444; border-radius: 8px; display: none; }
+
+        /* Actions & Cards */
+        .action-btn { width: 100%; padding: 14px; background: #3498db; color: #fff; font-weight: bold; font-size: 14px; border: none; border-radius: 8px; cursor: pointer; }
+        .result-card { margin-top: 15px; padding: 15px; background: #111; border: 1px solid #444; border-radius: 8px; display: none; }
         
         .contact-detail { font-size: 14px; margin-top: 8px; color: #bbb; display: flex; align-items: center; gap: 8px; }
         .contact-detail i { color: #3498db; font-style: normal; font-weight: bold; }
-        .location-tag { display: inline-block; background: rgba(52, 152, 219, 0.1); color: #3498db; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-top: 10px; border: 1px solid rgba(52,152,219,0.3); }
-        .location-tag.unknown { background: rgba(231, 76, 60, 0.1); color: #e74c3c; border-color: rgba(231,76,60,0.3); }
+        
+        .live-badge { display: inline-block; background: #e74c3c; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; animation: pulse 2s infinite; margin-bottom: 10px; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
 
-        /* Navigation Display Area */
+        /* Main Directions Area */
         .directions-panel { flex: 1; background: #151515; border: 1px solid #333; border-radius: 12px; padding: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         .directions-panel h2 { color: #fff; font-size: 32px; margin: 0 0 10px 0; }
         .directions-panel .room-num { color: #3498db; font-size: 24px; font-weight: bold; margin-bottom: 30px; }
@@ -154,12 +195,12 @@ HTML_CONTENT = """
 
     <div class="top-banner">
         <h1>SIR M. VISVESVARAYA BLOCK</h1>
-        <p>Interactive Campus Directory</p>
+        <p>Interactive Campus Directory & AI Assistant</p>
     </div>
 
     <div class="kiosk-container">
         <div class="sidebar">
-            <div class="panel">
+            <div class="panel" style="padding-bottom: 5px;">
                 <label>📍 Where are you right now?</label>
                 <select id="startFloor">
                     <option value="Ground Floor">Ground Floor</option>
@@ -171,11 +212,13 @@ HTML_CONTENT = """
             </div>
 
             <div class="main-tabs">
-                <button class="tab-btn active" onclick="switchMainTab('directoryView', this)">🏢 Directory</button>
-                <button class="tab-btn" onclick="switchMainTab('studentServicesView', this)">🎓 Student Services</button>
+                <button class="tab-btn active" onclick="switchTab('directoryView', this)">🏢 Directory</button>
+                <button class="tab-btn" onclick="switchTab('studentServicesView', this)">🎓 Proctors</button>
+                <button class="tab-btn" onclick="switchTab('scheduleView', this)">📅 Live Schedule</button>
             </div>
 
-            <div id="directoryView" class="panel active">
+            <!-- 1. DIRECTORY TAB -->
+            <div id="directoryView" class="panel view active">
                 <div class="category-row">
                     <button class="cat-btn active" onclick="loadCategory('Offices', this)">Offices</button>
                     <button class="cat-btn" onclick="loadCategory('Labs', this)">Labs</button>
@@ -184,38 +227,57 @@ HTML_CONTENT = """
                 <div class="facility-list" id="facilityList"></div>
             </div>
 
-            <div id="studentServicesView" class="panel">
+            <!-- 2. PROCTOR TAB -->
+            <div id="studentServicesView" class="panel view">
                 <label>Find Your Assigned Proctor</label>
                 <input type="text" id="usnInput" placeholder="Enter USN (e.g., 1BY24EC006)" style="text-transform: uppercase;">
-                <button class="search-btn" onclick="lookupProctor()">Search Proctor</button>
+                <button class="action-btn" onclick="lookupProctor()">Search Proctor</button>
                 
-                <div id="proctorCard" class="proctor-result">
-                    <h3 id="p_usn" style="margin:0 0 5px 0; color:#3498db; font-size:16px;"></h3>
-                    <div style="font-size: 22px; font-weight: bold; color: #fff; margin-bottom: 5px;" id="p_name"></div>
-                    <div style="color: #888; font-size: 14px; margin-bottom: 12px;" id="p_title"></div>
-                    
+                <div id="proctorCard" class="result-card">
+                    <h3 id="p_usn" style="margin:0 0 5px 0; color:#3498db; font-size:14px;"></h3>
+                    <div style="font-size: 20px; font-weight: bold; color: #fff; margin-bottom: 5px;" id="p_name"></div>
+                    <div style="color: #888; font-size: 13px; margin-bottom: 12px;" id="p_title"></div>
                     <div class="contact-detail"><i>📞</i> <span id="p_phone"></span></div>
                     <div class="contact-detail"><i>✉️</i> <span id="p_email"></span></div>
-                    
-                    <div id="p_location" class="location-tag"></div>
+                </div>
+            </div>
+
+            <!-- 3. LIVE SCHEDULE TAB -->
+            <div id="scheduleView" class="panel view">
+                <label>Find Professor's Live Location</label>
+                <div style="display:flex; gap:10px; margin-bottom:20px;">
+                    <input type="text" id="facultyName" placeholder="Enter name (e.g. Mamatha)" style="margin-bottom:0;">
+                    <button class="action-btn" style="width:auto; padding:0 20px;" onclick="trackFaculty()">Track</button>
+                </div>
+
+                <label>Check 5th Sem Section Status</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="sectionSelect" style="margin-bottom:0;">
+                        <option value="A">Section A</option>
+                        <option value="B">Section B</option>
+                        <option value="C">Section C</option>
+                    </select>
+                    <button class="action-btn" style="width:auto; padding:0 20px;" onclick="checkSchedule()">Check</button>
                 </div>
             </div>
         </div>
 
+        <!-- MAIN DISPLAY PANEL -->
         <div class="directions-panel" id="directionsPanel">
-            <div style="color: #666; font-size: 20px;">Select a room or search a proctor to get directions.</div>
+            <div style="color: #666; font-size: 20px;">Select a room, search a proctor, or check the schedule.</div>
         </div>
     </div>
 
     <script>
-        function switchMainTab(viewId, btnElem) {
+        function switchTab(viewId, btn) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btnElem.classList.add('active');
-            document.getElementById('directoryView').classList.remove('active');
-            document.getElementById('studentServicesView').classList.remove('active');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            btn.classList.add('active');
             document.getElementById(viewId).classList.add('active');
+            document.getElementById('directionsPanel').innerHTML = `<div style="color: #666; font-size: 20px;">Awaiting Query...</div>`;
         }
 
+        // DIRECTORY LOGIC
         async function loadCategory(catName, btnElem) {
             if (btnElem) {
                 document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
@@ -261,6 +323,7 @@ HTML_CONTENT = """
             `;
         }
 
+        // PROCTOR LOGIC
         async function lookupProctor() {
             const usn = document.getElementById('usnInput').value.trim();
             const card = document.getElementById('proctorCard');
@@ -276,30 +339,98 @@ HTML_CONTENT = """
                 document.getElementById('p_title').innerText = data.title;
                 document.getElementById('p_phone').innerText = data.phone;
                 document.getElementById('p_email').innerText = data.email;
-                
-                const locBadge = document.getElementById('p_location');
-                if (data.location === "Location not available") {
-                    locBadge.innerText = "📍 Location not available";
-                    locBadge.className = "location-tag unknown";
-                    showDirections(data.proctor, data.location, "Unknown Floor");
-                } else {
-                    locBadge.innerText = "📍 Office: " + data.location;
-                    locBadge.className = "location-tag";
-                    
-                    // Show directions based on location data
-                    let assumedFloor = data.location.includes("Floor") ? data.location : "Check location badge";
-                    if (data.location === "3rd Floor (Middle)") assumedFloor = "3rd Floor";
-                    showDirections(data.proctor, data.location, assumedFloor); 
-                }
-                
                 card.style.display = 'block';
+
+                let assumedFloor = data.location.includes("Floor") ? data.location : "Check Directory";
+                if (data.location === "3rd Floor (Middle)") assumedFloor = "3rd Floor";
+                showDirections(data.proctor, data.location, assumedFloor); 
+                
             } catch (err) {
                 card.style.display = 'none';
                 alert("USN not found in 4th Semester records.");
             }
         }
 
-        loadCategory('Labs');
+        // SCHEDULE LOGIC
+        async function trackFaculty() {
+            const name = document.getElementById('facultyName').value.trim();
+            if (!name) return;
+            
+            try {
+                const res = await fetch(`/faculty_status?name=${name}`);
+                const data = await res.json();
+                const panel = document.getElementById('directionsPanel');
+                
+                if (data.status === "out_of_hours") {
+                    panel.innerHTML = `
+                        <h2 style="color:#7f8c8d;">OUTSIDE COLLEGE HOURS</h2>
+                        <div class="directions-box">It is currently before 8:30 AM or after 4:30 PM.<br>Regular classes are not in session.</div>
+                    `;
+                } else if (data.status === "teaching") {
+                    panel.innerHTML = `
+                        <h2 style="color:#e74c3c;">IN CLASS NOW</h2>
+                        <div class="room-num">Room ${data.room}</div>
+                        <div class="directions-box">
+                            Currently teaching <strong>${data.subject}</strong> (Sec ${data.section})<br>
+                            Time: ${data.time_label}<br><br>
+                            <span style="color:#e74c3c; font-size:16px;">Please do not disturb unless urgent.</span>
+                        </div>
+                    `;
+                } else {
+                    panel.innerHTML = `
+                        <h2 style="color:#2ecc71;">PROFESSOR AVAILABLE</h2>
+                        <div class="directions-box">No class scheduled right now.<br>They are likely in their cabin. Please check the directory for office locations.</div>
+                    `;
+                }
+            } catch (err) {
+                alert("Could not retrieve faculty data.");
+            }
+        }
+
+        async function checkSchedule() {
+            const sec = document.getElementById('sectionSelect').value;
+            
+            try {
+                const res = await fetch(`/section_status?sec=${sec}`);
+                const data = await res.json();
+                const panel = document.getElementById('directionsPanel');
+                
+                if (data.status === "out_of_hours") {
+                    panel.innerHTML = `
+                        <h2 style="color:#7f8c8d;">OUTSIDE COLLEGE HOURS</h2>
+                        <div class="directions-box">It is currently before 8:30 AM or after 4:30 PM.<br>Regular classes are not in session.</div>
+                    `;
+                } else if (data.status === "active") {
+                    panel.innerHTML = `
+                        <h2 style="color:#e74c3c;">CLASS IN SESSION</h2>
+                        <div class="room-num">Room ${data.room}</div>
+                        <div class="directions-box">
+                            <strong>${data.subject}</strong> with ${data.faculty}<br>
+                            <span style="color:#888; font-size:15px;">${data.time_label}</span>
+                        </div>
+                    `;
+                } else if (data.status === "upcoming") {
+                    panel.innerHTML = `
+                        <h2 style="color:#3498db;">FREE PERIOD</h2>
+                        <div class="directions-box">
+                            <em>No class right now.</em><br><br>
+                            <strong>Up Next:</strong> ${data.subject} with ${data.faculty}<br>
+                            <strong>Room:</strong> ${data.room} (${data.time_label})
+                        </div>
+                    `;
+                } else {
+                    panel.innerHTML = `
+                        <h2 style="color:#2ecc71;">CLASSES OVER</h2>
+                        <div class="directions-box">No more classes scheduled for Section ${sec} today.</div>
+                    `;
+                }
+            } catch (err) {
+                alert("Error fetching schedule.");
+            }
+        }
+
+        // Init
+        loadCategory('Offices');
     </script>
 </body>
 </html>
@@ -335,6 +466,73 @@ def get_proctor(usn: str):
             "location": result[4]
         }
     raise HTTPException(status_code=404)
+
+def get_real_time():
+    """Fetches real system time and converts to minutes for schedule math."""
+    now = datetime.datetime.now()
+    day_name = now.strftime('%A')
+    current_min = now.hour * 60 + now.minute
+    return day_name, current_min
+
+@app.get("/faculty_status")
+def get_faculty_status(name: str):
+    day_name, current_min = get_real_time()
+    
+    # Check if outside hours (Before 8:30 AM or after 4:30 PM)
+    if current_min < 510 or current_min > 990 or day_name == 'Sunday':
+        return {"status": "out_of_hours"}
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT subject, section, room, time_label 
+        FROM timetable 
+        WHERE faculty LIKE ? AND day = ? AND ? >= start_min AND ? < end_min
+    """, ('%' + name + '%', day_name, current_min, current_min))
+    
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result:
+        return {"status": "teaching", "subject": result[0], "section": result[1], "room": result[2], "time_label": result[3]}
+    return {"status": "free"}
+
+@app.get("/section_status")
+def get_section_status(sec: str):
+    day_name, current_min = get_real_time()
+    
+    # Check if outside hours (Before 8:30 AM or after 4:30 PM)
+    if current_min < 510 or current_min > 990 or day_name == 'Sunday':
+        return {"status": "out_of_hours"}
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT subject, faculty, room, time_label 
+        FROM timetable 
+        WHERE section = ? AND day = ? AND ? >= start_min AND ? < end_min
+    """, (sec, day_name, current_min, current_min))
+    live_class = cursor.fetchone()
+    
+    if live_class:
+        conn.close()
+        return {"status": "active", "subject": live_class[0], "faculty": live_class[1], "room": live_class[2], "time_label": live_class[3]}
+        
+    cursor.execute("""
+        SELECT subject, faculty, room, time_label 
+        FROM timetable 
+        WHERE section = ? AND day = ? AND start_min > ?
+        ORDER BY start_min ASC LIMIT 1
+    """, (sec, day_name, current_min))
+    next_class = cursor.fetchone()
+    
+    conn.close()
+    
+    if next_class:
+        return {"status": "upcoming", "subject": next_class[0], "faculty": next_class[1], "room": next_class[2], "time_label": next_class[3]}
+        
+    return {"status": "done"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
