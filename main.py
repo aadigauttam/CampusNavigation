@@ -7,8 +7,12 @@ import uvicorn
 
 app = FastAPI(title="Campus Assistant API")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "campus.db")
+# VERCEL FIX: Route database to the writable /tmp directory if deployed
+if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+    DB_PATH = "/tmp/campus.db"
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB_PATH = os.path.join(BASE_DIR, "campus.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -181,9 +185,6 @@ HTML_CONTENT = """
         .contact-detail { font-size: 14px; margin-top: 8px; color: #bbb; display: flex; align-items: center; gap: 8px; }
         .contact-detail i { color: #3498db; font-style: normal; font-weight: bold; }
         
-        .live-badge { display: inline-block; background: #e74c3c; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; animation: pulse 2s infinite; margin-bottom: 10px; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
-
         /* Main Directions Area */
         .directions-panel { flex: 1; background: #151515; border: 1px solid #333; border-radius: 12px; padding: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
         .directions-panel h2 { color: #fff; font-size: 32px; margin: 0 0 10px 0; }
@@ -214,7 +215,7 @@ HTML_CONTENT = """
             <div class="main-tabs">
                 <button class="tab-btn active" onclick="switchTab('directoryView', this)">🏢 Directory</button>
                 <button class="tab-btn" onclick="switchTab('studentServicesView', this)">🎓 Proctors</button>
-                <button class="tab-btn" onclick="switchTab('scheduleView', this)">📅 Live Schedule</button>
+                <button class="tab-btn" onclick="switchTab('scheduleView', this)">📅 Schedule</button>
             </div>
 
             <!-- 1. DIRECTORY TAB -->
@@ -277,7 +278,6 @@ HTML_CONTENT = """
             document.getElementById('directionsPanel').innerHTML = `<div style="color: #666; font-size: 20px;">Awaiting Query...</div>`;
         }
 
-        // DIRECTORY LOGIC
         async function loadCategory(catName, btnElem) {
             if (btnElem) {
                 document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
@@ -323,7 +323,6 @@ HTML_CONTENT = """
             `;
         }
 
-        // PROCTOR LOGIC
         async function lookupProctor() {
             const usn = document.getElementById('usnInput').value.trim();
             const card = document.getElementById('proctorCard');
@@ -347,11 +346,10 @@ HTML_CONTENT = """
                 
             } catch (err) {
                 card.style.display = 'none';
-                alert("USN not found in 4th Semester records.");
+                alert("USN not found in records.");
             }
         }
 
-        // SCHEDULE LOGIC
         async function trackFaculty() {
             const name = document.getElementById('facultyName').value.trim();
             if (!name) return;
@@ -429,7 +427,6 @@ HTML_CONTENT = """
             }
         }
 
-        // Init
         loadCategory('Offices');
     </script>
 </body>
@@ -468,7 +465,6 @@ def get_proctor(usn: str):
     raise HTTPException(status_code=404)
 
 def get_real_time():
-    """Fetches real system time and converts to minutes for schedule math."""
     now = datetime.datetime.now()
     day_name = now.strftime('%A')
     current_min = now.hour * 60 + now.minute
@@ -478,7 +474,6 @@ def get_real_time():
 def get_faculty_status(name: str):
     day_name, current_min = get_real_time()
     
-    # Check if outside hours (Before 8:30 AM or after 4:30 PM)
     if current_min < 510 or current_min > 990 or day_name == 'Sunday':
         return {"status": "out_of_hours"}
     
@@ -501,7 +496,6 @@ def get_faculty_status(name: str):
 def get_section_status(sec: str):
     day_name, current_min = get_real_time()
     
-    # Check if outside hours (Before 8:30 AM or after 4:30 PM)
     if current_min < 510 or current_min > 990 or day_name == 'Sunday':
         return {"status": "out_of_hours"}
     
