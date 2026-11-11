@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Navigation Kiosk</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; text-align: center; margin: 0; padding: 50px; }
+        h1 { color: #f39c12; }
+        .search-box { margin: 30px 0; }
+        input { padding: 15px; width: 300px; font-size: 16px; border-radius: 5px; border: none; }
+        button { padding: 15px 25px; font-size: 16px; background: #f39c12; color: #fff; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+        button:hover { background: #e67e22; }
+        .result-card { background: #333; padding: 20px; border-radius: 8px; width: 400px; margin: 20px auto; display: none; text-align: left; }
+    </style>
+</head>
+<body>
+
+    <h1>Sir M. Visvesvaraya Block - Kiosk</h1>
+    <p>Touch or search for a room or lab:</p>
+
+    <div class="search-box">
+        <input type="text" id="query" placeholder="e.g. DSP Lab, Board Room...">
+        <button onclick="searchRoom()">Search</button>
+    </div>
+
+    <div id="result" class="result-card">
+        <h3 id="res-name"></h3>
+        <p><strong>Floor:</strong> <span id="res-floor"></span></p>
+        <p><strong>Location Node:</strong> <span id="res-node"></span></p>
+    </div>
+
+    <script>
+        async function searchRoom() {
+            const query = document.getElementById('query').value;
+            const resCard = document.getElementById('result');
+            
+            try {
+                const response = await fetch(`/search?query=${query}`);
+                if (!response.ok) throw new Error("Room not found");
+                
+                const data = await response.json();
+                document.getElementById('res-name').innerText = data.room;
+                document.getElementById('res-floor').innerText = data.floor;
+                document.getElementById('res-node').innerText = data.node;
+                resCard.style.display = 'block';
+            } catch (error) {
+                alert("I don't have verified information for that yet.");
+                resCard.style.display = 'none';
+            }
+        }
+    </script>
+
+</body>
+</html>
